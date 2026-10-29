@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Metadata refresh</title>
+</head>
+<body>
+<div id="MetadataRefreshConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox,emby-select">
+    <div data-role="content">
+        <div class="content-primary">
+            <h2 class="sectionTitle">Metadata refresh</h2>
+
+            <div class="verticalSection">
+                <h3 class="sectionTitle">Status</h3>
+                <div id="mrStatusText" style="font-weight: bold; margin-bottom: 0.5em;">Loading...</div>
+                <div style="height: 0.8em; border-radius: 0.4em; background: rgba(128, 128, 128, 0.35); overflow: hidden; margin-bottom: 0.5em;">
+                    <div id="mrProgressBar" style="height: 100%; width: 0%; background: var(--theme-primary-color, #00a4dc); transition: width 0.4s;"></div>
+                </div>
+                <div id="mrStatusDetail" class="fieldDescription" style="margin-bottom: 1em;"></div>
+                <div style="margin-bottom: 0.5em;">
+                    <button id="mrRunButton" is="emby-button" type="button" class="raised button-submit emby-button">
+                        <span>Run now</span>
+                    </button>
+                    <button id="mrStopButton" is="emby-button" type="button" class="raised emby-button" disabled>
+                        <span>Stop</span>
+                    </button>
+                </div>
+                <div class="fieldDescription">
+                    "Run now" uses the saved settings. The same progress is shown in
+                    Dashboard &gt; Scheduled Tasks, where you can also add a schedule to the
+                    "Metadata refresh" task (it has none by default).
+                </div>
+            </div>
+
+            <form id="MetadataRefreshConfigForm">
+                <div class="verticalSection">
+                    <h3 class="sectionTitle">Libraries</h3>
+                    <div class="fieldDescription" style="margin-bottom: 0.5em;">
+                        Select the libraries whose metadata is refreshed by the task. When no library
+                        is selected the task does nothing.
+                    </div>
+                    <div id="mrLibraries">Loading libraries...</div>
+                </div>
+
+                <div class="verticalSection">
+                    <h3 class="sectionTitle">Refresh options</h3>
+
+                    <div class="selectContainer">
+                        <label class="selectLabel" for="mrRefreshMode">Refresh mode</label>
+                        <select is="emby-select" id="mrRefreshMode" name="RefreshMode" class="emby-select-withcolor emby-select">
+                            <option value="ScanForNewAndUpdatedFiles">Scan for new and updated files</option>
+                            <option value="SearchForMissingMetadata">Search for missing metadata</option>
+                            <option value="ReplaceAllMetadata">Replace all metadata</option>
+                        </select>
+                        <div class="fieldDescription">
+                            Scan for new and updated files: fetches metadata only for what is new or
+                            changed. Search for missing metadata: queries the providers and fills in
+                            what is missing, keeping what you already have. Replace all metadata:
+                            queries the providers and overwrites all the existing metadata.
+                        </div>
+                    </div>
+
+                    <div class="checkboxContainer checkboxContainer-withDescripton">
+                        <label class="emby-checkbox-label">
+                            <input id="mrReplaceImages" name="ReplaceExistingImages" type="checkbox" is="emby-checkbox" />
+                            <span>Replace existing images</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">
+                            Downloads the images again and replaces the ones you already have.
+                            Not used by "Scan for new and updated files".
+                        </div>
+                    </div>
+
+                    <div class="checkboxContainer checkboxContainer-withDescripton">
+                        <label class="emby-checkbox-label">
+                            <input id="mrRegenerateTrickplay" name="RegenerateTrickplay" type="checkbox" is="emby-checkbox" />
+                            <span>Replace existing trickplay images</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">
+                            Generates the trickplay (seek preview) images again. It can take a long
+                            time on large libraries. Not used by "Scan for new and updated files".
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <button is="emby-button" type="submit" class="raised button-submit block emby-button">
+                        <span>Save</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        (function () {
+            var pluginId = '0d4b7a2f-1d0f-4285-83ac-fd51b62ee4ad';
+            var page = document.querySelector('#MetadataRefreshConfigPage');
+            var pollTimer = null;
+
+            function get(obj, name) {
+                if (!obj) {
+                    return undefined;
+                }
+                if (obj[name] !== undefined) {
+                    return obj[name];
+                }
+                return obj[name.charAt(0).toLowerCase() + name.slice(1)];
+            }
+
+            function normalizeId(id) {
+                return String(id || '').replace(/-/g, '').toLowerCase();
+            }
+
+            function escapeHtml(text) {
+                return String(text).replace(/[&<>"']/g, function (c) {
+                    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+                });
+            }
+
+            function formatTime(value) {
+                if (!value) {
+                    return '';
+                }
+                var date = new Date(value);
+                return isNaN(date.getTime()) ? '' : date.toLocaleString();
+            }
+
+            function renderStatus(status) {
+                var state = String(get(status, 'State') || 'Idle');
+                var progress = Number(get(status, 'Progress')) || 0;
+                var library = get(status, 'CurrentLibrary') || '';
+                var index = get(status, 'CurrentLibraryIndex') || 0;
+                var total = get(status, 'LibrariesTotal') || 0;
+                var message = get(status, 'Message') || '';
+                var options = get(status, 'Options') || '';
+                var started = formatTime(get(status, 'StartedAt'));
+                var finished = formatTime(get(status, 'FinishedAt'));
+                var running = state === 'Running';
+
+                var text;
+                if (running) {
+                    text = 'Running: ' + Math.floor(progress) + '%';
+                    if (library) {
+                        text += ' - ' + library + ' (' + index + '/' + total + ')';
+                    }
+                } else if (state === 'Completed') {
+                    text = 'Completed';
+                } else if (state === 'Cancelled') {
+                    text = 'Cancelled';
+                } else if (state === 'Failed') {
+                    text = 'Failed';
+                } else if (state === 'Skipped') {
+                    text = 'Skipped';
+                } else {
+                    text = 'Idle: the task did not run since the server was started.';
+                }
+
+                var details = [];
+                if (message) {
+                    details.push(message);
+                }
+                if (options && state !== 'Idle') {
+                    details.push('Options: ' + options + '.');
+                }
+                if (started) {
+                    details.push('Started: ' + started + '.');
+                }
+                if (finished && !running) {
+                    details.push('Finished: ' + finished + '.');
+                }
+
+                document.querySelector('#mrStatusText').textContent = text;
+                document.querySelector('#mrStatusDetail').textContent = details.join(' ');
+                document.querySelector('#mrProgressBar').style.width = (running || state === 'Completed' ? progress : 0) + '%';
+                document.querySelector('#mrRunButton').disabled = running;
+                document.querySelector('#mrStopButton').disabled = !running;
+            }
+
+            function loadStatus() {
+                return ApiClient.getJSON(ApiClient.getUrl('MetadataRefresh/Status')).then(renderStatus, function () {
+                    document.querySelector('#mrStatusText').textContent = 'The status is not available.';
+                });
+            }
+
+            function startPolling() {
+                stopPolling();
+                pollTimer = setInterval(function () {
+                    if (!document.body.contains(page)) {
+                        stopPolling();
+                        return;
+                    }
+                    loadStatus();
+                }, 2000);
+            }
+
+            function stopPolling() {
+                if (pollTimer !== null) {
+                    clearInterval(pollTimer);
+                    pollTimer = null;
+                }
+            }
+
+            function renderLibraries(folders, selectedIds) {
+                var container = document.querySelector('#mrLibraries');
+                var selected = {};
+                (selectedIds || []).forEach(function (id) {
+                    selected[normalizeId(id)] = true;
+                });
+
+                if (!folders || folders.length === 0) {
+                    container.textContent = 'No libraries found.';
+                    return;
+                }
+
+                var html = '';
+                folders.forEach(function (folder) {
+                    var id = get(folder, 'ItemId');
+                    var name = get(folder, 'Name') || id;
+                    var checked = selected[normalizeId(id)] ? ' checked' : '';
+                    html += '<div class="checkboxContainer">' +
+                        '<label class="emby-checkbox-label">' +
+                        '<input type="checkbox" is="emby-checkbox" class="mrLibrary" data-id="' + escapeHtml(id) + '"' + checked + ' />' +
+                        '<span>' + escapeHtml(name) + '</span>' +
+                        '</label></div>';
+                });
+                container.innerHTML = html;
+            }
+
+            function updateImageOptions() {
+                var scanOnly = document.querySelector('#mrRefreshMode').value === 'ScanForNewAndUpdatedFiles';
+                document.querySelector('#mrReplaceImages').disabled = scanOnly;
+                document.querySelector('#mrRegenerateTrickplay').disabled = scanOnly;
+            }
+
+            page.addEventListener('pageshow', function () {
+                Dashboard.showLoadingMsg();
+                Promise.all([
+                    ApiClient.getPluginConfiguration(pluginId),
+                    ApiClient.getJSON(ApiClient.getUrl('Library/VirtualFolders'))
+                ]).then(function (results) {
+                    var config = results[0];
+                    renderLibraries(results[1], config.LibraryIds);
+                    document.querySelector('#mrRefreshMode').value = config.RefreshMode || 'SearchForMissingMetadata';
+                    document.querySelector('#mrReplaceImages').checked = !!config.ReplaceExistingImages;
+                    document.querySelector('#mrRegenerateTrickplay').checked = !!config.RegenerateTrickplay;
+                    updateImageOptions();
+                    Dashboard.hideLoadingMsg();
+                }, function () {
+                    Dashboard.hideLoadingMsg();
+                });
+
+                loadStatus();
+                startPolling();
+            });
+
+            page.addEventListener('pagehide', stopPolling);
+
+            document.querySelector('#mrRefreshMode').addEventListener('change', updateImageOptions);
+
+            document.querySelector('#mrRunButton').addEventListener('click', function () {
+                document.querySelector('#mrRunButton').disabled = true;
+                document.querySelector('#mrStatusText').textContent = 'Starting...';
+                ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl('MetadataRefresh/Start') }).then(function () {
+                    setTimeout(loadStatus, 800);
+                }, loadStatus);
+            });
+
+            document.querySelector('#mrStopButton').addEventListener('click', function () {
+                document.querySelector('#mrStopButton').disabled = true;
+                ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl('MetadataRefresh/Stop') }).then(function () {
+                    setTimeout(loadStatus, 800);
+                }, loadStatus);
+            });
+
+            document.querySelector('#MetadataRefreshConfigForm').addEventListener('submit', function (e) {
+                e.preventDefault();
+                Dashboard.showLoadingMsg();
+                ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                    var ids = [];
+                    document.querySelectorAll('#mrLibraries .mrLibrary').forEach(function (checkbox) {
+                        if (checkbox.checked) {
+                            ids.push(checkbox.getAttribute('data-id'));
+                        }
+                    });
+                    config.LibraryIds = ids;
+                    config.RefreshMode = document.querySelector('#mrRefreshMode').value;
+                    config.ReplaceExistingImages = document.querySelector('#mrReplaceImages').checked;
+                    config.RegenerateTrickplay = document.querySelector('#mrRegenerateTrickplay').checked;
+                    ApiClient.updatePluginConfiguration(pluginId, config).then(function (result) {
+                        Dashboard.processPluginConfigurationUpdateResult(result);
+                    });
+                });
+                return false;
+            });
+        })();
+    </script>
+</div>
+</body>
+</html>
