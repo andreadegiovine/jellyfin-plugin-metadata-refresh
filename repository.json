@@ -1,0 +1,20 @@
+[
+  {
+    "category": "Metadata",
+    "description": "Adds a scheduled task, \"Metadata refresh\", to the Library category of the Scheduled Tasks. The task refreshes the metadata of the libraries selected in the plugin settings, with the same options as the \"Refresh metadata\" dialog of Jellyfin (scan for new and updated files, search for missing metadata, replace all metadata, replace existing images, regenerate trickplay images). The task has no trigger by default: add the schedule you want in Dashboard > Scheduled Tasks, or run it by hand. The progress is shown in the Scheduled Tasks page and in the plugin settings page, which has its own entry in the Dashboard sidebar.\n",
+    "guid": "0d4b7a2f-1d0f-4285-83ac-fd51b62ee4ad",
+    "name": "Metadata refresh",
+    "overview": "Scheduled task that refreshes the metadata of the libraries you choose, with live progress",
+    "owner": "andreadegiovine",
+    "versions": [
+      {
+        "changelog": "",
+        "checksum": "d420167aba2a3f6e647249de927c625b",
+        "sourceUrl": "https://github.com/andreadegiovine/jellyfin-plugin-metadata-refresh/releases/download/v0.1.0.0/metadata-refresh_0.1.0.0.zip",
+        "targetAbi": "12.0.0.0",
+        "timestamp": "2026-10-29T11:29:04Z",
+        "version": "0.1.0.0"
+      }
+    ]
+  }
+]
